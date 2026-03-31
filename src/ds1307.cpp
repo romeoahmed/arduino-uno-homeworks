@@ -44,7 +44,7 @@ static constexpr uint8_t fromBcd(uint8_t v) {
 }
 
 // ── Forward declarations ──────────────────────────────────────────────────────
-static bool setTime(DateTime const& dt);
+[[maybe_unused]] static bool setTime(DateTime const& dt);
 static bool readTime(DateTime& dt);
 static void printTime(DateTime const& dt);
 static void printDayOfWeek(uint8_t dow);
@@ -84,7 +84,7 @@ void loop() {
 
 // Write dt into the DS1307 timekeeping registers.
 // Returns true on success (Wire.endTransmission() == 0).
-static bool setTime(DateTime const& dt) {
+[[maybe_unused]] static bool setTime(DateTime const& dt) {
     Wire.beginTransmission(DS1307_ADDR);
     Wire.write(REG_SECONDS);
     // Writing toBcd(second) with bit7=0 also clears the Clock Halt flag,
