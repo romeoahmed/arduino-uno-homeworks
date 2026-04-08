@@ -28,9 +28,9 @@
 
 namespace Sonar {
 
-static constexpr uint8_t  TRIG       = 3;
-static constexpr uint8_t  ECHO       = 4;
-static constexpr uint32_t TIMEOUT_US = 30000; // ~5 m max range
+static constexpr uint8_t TRIG = 3;
+static constexpr uint8_t ECHO = 4;
+static constexpr uint32_t TIMEOUT_US = 60000; // ~10 m max range
 
 static void init() {
     pinMode(TRIG, OUTPUT);
@@ -58,11 +58,11 @@ static float measure() {
 
 namespace Mpu {
 
-static constexpr uint8_t ADDR          = 0x68;
-static constexpr uint8_t REG_PWR       = 0x6B;
+static constexpr uint8_t ADDR = 0x68;
+static constexpr uint8_t REG_PWR = 0x6B;
 static constexpr uint8_t REG_ACCEL_CFG = 0x1C;
-static constexpr uint8_t REG_ACCEL     = 0x3B;
-static constexpr float   ACCEL_LSB     = 16384.0f; // ±2 g
+static constexpr uint8_t REG_ACCEL = 0x3B;
+static constexpr float ACCEL_LSB = 16384.0f; // ±2 g
 
 static float ax = 0.0f, ay = 0.0f, az = 0.0f;
 
@@ -106,22 +106,22 @@ static bool read() {
 
 namespace Velocity {
 
-static float alpha   = 0.5f; // complementary weight (0=accel only, 1=ultrasonic only)
+static float alpha = 0.5f;   // complementary weight (0=accel only, 1=ultrasonic only)
 static float lp_coef = 0.1f; // acceleration low-pass coefficient
 
-static float   prev_dist = 0.0f;
-static float   v_accel   = 0.0f;
-static float   a_prev    = 0.0f;
-static float   a_lp      = 0.0f;
+static float prev_dist = 0.0f;
+static float v_accel = 0.0f;
+static float a_prev = 0.0f;
+static float a_lp = 0.0f;
 static uint8_t still_cnt = 0;
 
 // Call once with the first sonar distance to warm up internal state.
 // Passing 0.0 (timeout on startup) is valid — starts at rest.
 static void init(float dist) {
     prev_dist = dist;
-    v_accel   = 0.0f;
-    a_prev    = 0.0f;
-    a_lp      = 0.0f;
+    v_accel = 0.0f;
+    a_prev = 0.0f;
+    a_lp = 0.0f;
     still_cnt = 0;
 }
 
@@ -130,8 +130,8 @@ static void init(float dist) {
 //   ax,ay,az — MPU6500 readings in g
 //   dt_s     — elapsed time since last call, in seconds
 // Writes v_ultra_out and v_accel_out (cm/s); returns v_fused (cm/s).
-static float update(float dist, float ax, float ay, float az, float dt_s,
-                    float& v_ultra_out, float& v_accel_out) {
+static float update(float dist, float ax, float ay, float az, float dt_s, float& v_ultra_out,
+                    float& v_accel_out) {
     // Gravity-compensated acceleration magnitude (g). Stationary reads ~0.
     float a_mag = sqrtf(ax * ax + ay * ay + az * az) - 1.0f;
 
@@ -140,23 +140,25 @@ static float update(float dist, float ax, float ay, float az, float dt_s,
 
     // Ultrasonic velocity: finite difference, hold previous on timeout
     float effective_dist = (dist > 0.0f) ? dist : prev_dist;
-    float v_ultra        = (effective_dist - prev_dist) / dt_s;
+    float v_ultra = (effective_dist - prev_dist) / dt_s;
     if (dist > 0.0f)
         prev_dist = effective_dist;
 
     // Trapezoidal integration of acceleration (g → cm/s²: × 981)
     v_accel += (a_lp + a_prev) * 0.5f * dt_s * 981.0f;
-    a_prev   = a_lp;
+    a_prev = a_lp;
 
-    // Drift correction: nudge v_accel toward v_ultra each tick
-    v_accel = 0.98f * v_accel + 0.02f * v_ultra;
+    // Drift correction: blend v_accel toward v_ultra each tick
+    v_accel = 0.95f * v_accel + 0.05f * v_ultra;
 
-    // Stationary snap-to-zero: 5 consecutive still ticks → zero v_accel.
+    // Stationary snap-to-zero: 3 consecutive still ticks (300 ms) → zero v_accel.
     // Only count ticks where sonar returned a valid reading (dist > 0), so
     // a sensor timeout cannot falsely increment the counter while moving.
     if (dist > 0.0f && fabsf(a_lp) < 0.02f && fabsf(v_ultra) < 0.5f) {
-        if (still_cnt < 255) ++still_cnt;
-        if (still_cnt >= 5) v_accel = 0.0f;
+        if (still_cnt < 255)
+            ++still_cnt;
+        if (still_cnt >= 3)
+            v_accel = 0.0f;
     } else if (dist > 0.0f) {
         still_cnt = 0;
     }
@@ -231,9 +233,9 @@ void setup() {
 
 void loop() {
     // ── Serial command parser (non-blocking) ──────────────────────────────
-    static char    buf[24];
-    static uint8_t len      = 0;
-    static bool    overflow = false;
+    static char buf[24];
+    static uint8_t len = 0;
+    static bool overflow = false;
 
     while (Serial.available()) {
         char c = static_cast<char>(Serial.read());
@@ -243,17 +245,17 @@ void loop() {
                 handleCommand(buf);
             }
             overflow = false;
-            len      = 0;
+            len = 0;
         } else if (len < sizeof(buf) - 1) {
             buf[len++] = c;
         } else {
             overflow = true;
-            len      = 0;
+            len = 0;
         }
     }
 
     // ── Sample & stream (10 Hz) ───────────────────────────────────────────
-    uint32_t const  now    = millis();
+    uint32_t const now = millis();
     if (now - gLastMs < 100)
         return;
     float const dt = static_cast<float>(now - gLastMs) * 0.001f;
