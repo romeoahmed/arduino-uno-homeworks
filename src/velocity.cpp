@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
 #include <Wire.h>
-#include <cmath>
+#include <math.h> // avr-libc; <cmath> is not reliably available on AVR toolchain
 
 // ══ Sonar (HC-SR04) ═══════════════════════════════════════════════════════════
 
