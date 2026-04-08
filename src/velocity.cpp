@@ -149,11 +149,13 @@ static float update(float dist, float ax, float ay, float az, float dt_s,
     // Drift correction: nudge v_accel toward v_ultra each tick
     v_accel = 0.98f * v_accel + 0.02f * v_ultra;
 
-    // Stationary snap-to-zero: 5 consecutive still ticks → zero v_accel
-    if (fabsf(a_lp) < 0.02f && fabsf(v_ultra) < 0.5f) {
+    // Stationary snap-to-zero: 5 consecutive still ticks → zero v_accel.
+    // Only count ticks where sonar returned a valid reading (dist > 0), so
+    // a sensor timeout cannot falsely increment the counter while moving.
+    if (dist > 0.0f && fabsf(a_lp) < 0.02f && fabsf(v_ultra) < 0.5f) {
         if (++still_cnt >= 5)
             v_accel = 0.0f;
-    } else {
+    } else if (dist > 0.0f) {
         still_cnt = 0;
     }
 
