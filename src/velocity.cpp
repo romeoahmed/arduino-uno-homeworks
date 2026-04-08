@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
 #include <Wire.h>
-#include <math.h>
+#include <cmath>
 
 // ══ Sonar (HC-SR04) ═══════════════════════════════════════════════════════════
 
@@ -64,7 +64,7 @@ static constexpr uint8_t REG_ACCEL_CFG = 0x1C;
 static constexpr uint8_t REG_ACCEL     = 0x3B;
 static constexpr float   ACCEL_LSB     = 16384.0f; // ±2 g
 
-float ax = 0.0f, ay = 0.0f, az = 0.0f;
+static float ax = 0.0f, ay = 0.0f, az = 0.0f;
 
 static void init() {
     Wire.beginTransmission(ADDR);
@@ -90,7 +90,9 @@ static bool read() {
         return false;
 
     auto raw16 = []() -> int16_t {
-        return static_cast<int16_t>((Wire.read() << 8) | Wire.read());
+        uint8_t hi = static_cast<uint8_t>(Wire.read());
+        uint8_t lo = static_cast<uint8_t>(Wire.read());
+        return static_cast<int16_t>(static_cast<uint16_t>(hi) << 8 | lo);
     };
     ax = raw16() / ACCEL_LSB;
     ay = raw16() / ACCEL_LSB;
@@ -104,8 +106,8 @@ static bool read() {
 
 namespace Velocity {
 
-float   alpha   = 0.5f; // complementary weight (0=accel only, 1=ultrasonic only)
-float   lp_coef = 0.1f; // acceleration low-pass coefficient
+static float alpha   = 0.5f; // complementary weight (0=accel only, 1=ultrasonic only)
+static float lp_coef = 0.1f; // acceleration low-pass coefficient
 
 static float   prev_dist = 0.0f;
 static float   v_accel   = 0.0f;
@@ -153,8 +155,8 @@ static float update(float dist, float ax, float ay, float az, float dt_s,
     // Only count ticks where sonar returned a valid reading (dist > 0), so
     // a sensor timeout cannot falsely increment the counter while moving.
     if (dist > 0.0f && fabsf(a_lp) < 0.02f && fabsf(v_ultra) < 0.5f) {
-        if (++still_cnt >= 5)
-            v_accel = 0.0f;
+        if (still_cnt < 255) ++still_cnt;
+        if (still_cnt >= 5) v_accel = 0.0f;
     } else if (dist > 0.0f) {
         still_cnt = 0;
     }
@@ -208,6 +210,8 @@ static void handleCommand(char const* cmd) {
 
 // ══ Arduino entry ═════════════════════════════════════════════════════════════
 
+static uint32_t gLastMs = 0; // initialised in setup() to avoid garbage first-tick dt
+
 void setup() {
     Serial.begin(57600);
     Wire.begin();
@@ -221,6 +225,8 @@ void setup() {
     Serial.println(F("━━━ Velocity Fusion Demo ━━━"));
     Serial.println(F("alpha=0.5  lp=0.1  10 Hz"));
     Serial.println(F("Commands: start  stop  alpha <n>  lp <n>"));
+
+    gLastMs = millis(); // sync timer after init so first dt is ~100 ms, not startup time
 }
 
 void loop() {
@@ -247,12 +253,11 @@ void loop() {
     }
 
     // ── Sample & stream (10 Hz) ───────────────────────────────────────────
-    static uint32_t lastMs = 0;
     uint32_t const  now    = millis();
-    if (now - lastMs < 100)
+    if (now - gLastMs < 100)
         return;
-    float const dt = static_cast<float>(now - lastMs) * 0.001f;
-    lastMs = now;
+    float const dt = static_cast<float>(now - gLastMs) * 0.001f;
+    gLastMs = now;
 
     float const dist = Sonar::measure();
 
